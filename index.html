@@ -55,9 +55,9 @@
             <p>고객 로그인</p>
           </div>
         </div>
-        <p class="login-copy">가입한 이름과 연락처로 보유 포인트와 쿠폰을 확인합니다.</p>
-        <input id="customerLoginName" placeholder="이름" autocomplete="name" />
-        <input id="customerLoginPhone" required placeholder="연락처" autocomplete="tel" />
+        <p class="login-copy">가입할 때 만든 고객 계정으로 보유 포인트와 쿠폰을 확인합니다.</p>
+        <input id="customerLoginUsername" required placeholder="고객 아이디" autocomplete="username" />
+        <input id="customerLoginPassword" required type="password" placeholder="비밀번호" autocomplete="current-password" />
         <button class="primary-button" type="submit">내 멤버십 보기</button>
         <button id="customerLoginBackBtn" class="ghost-button full" type="button">처음으로</button>
         <p id="customerLoginMessage" class="login-message"></p>
@@ -78,6 +78,14 @@
           <div><span>보유 쿠폰</span><strong id="customerPortalCouponCount">0장</strong></div>
         </div>
         <div id="customerCouponList" class="customer-coupon-list"></div>
+        <form id="customerPointForm" class="point-use-form">
+          <div class="section-heading"><h3>포인트 사용</h3><p>관리자 확인 후 포인트가 차감됩니다.</p></div>
+          <input id="pointUseAmount" required type="number" min="1" step="1" placeholder="사용할 포인트" />
+          <input id="pointUseMemo" placeholder="사용 메모" />
+          <input id="pointManagerUsername" required placeholder="관리자 아이디" autocomplete="username" />
+          <input id="pointManagerPassword" required type="password" placeholder="관리자 비밀번호" autocomplete="current-password" />
+          <button class="primary-button" type="submit">관리자 확인 후 차감</button>
+        </form>
         <button id="customerPortalLogoutBtn" class="ghost-button full" type="button">로그아웃</button>
       </div>
     </div>
@@ -95,6 +103,8 @@
         <input id="signupPhone" required placeholder="연락처" autocomplete="tel" />
         <input id="signupBirthday" type="date" aria-label="생일" />
         <input id="signupEmail" type="email" placeholder="이메일" autocomplete="email" />
+        <input id="signupUsername" required placeholder="고객 아이디" autocomplete="username" />
+        <input id="signupPassword" required type="password" placeholder="비밀번호" autocomplete="new-password" />
         <button class="primary-button" type="submit">가입하기</button>
         <button id="backToLoginBtn" class="ghost-button full" type="button">처음으로</button>
         <p id="signupMessage" class="login-message"></p>

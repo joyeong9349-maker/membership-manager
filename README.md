@@ -6,6 +6,7 @@ Includes separate manager/customer entry screens, manager approval, customer sel
 Receipt camera OCR uses Tesseract.js in the browser, with editable text and amount fields for correction.
 Coupon issuance is unified into one dialog with custom and birthday coupon modes.
 Receipt OCR now preprocesses the image and recognizes three-digit totals such as 364.
+Customers now create their own login account, and coupon redemption or point deduction requires manager approval.
 
 ## Run
 
@@ -25,7 +26,10 @@ npm start
 MEMBERSHIP_ADMIN_USER=your-admin-username
 MEMBERSHIP_ADMIN_PASSWORD=your-login-password
 MEMBERSHIP_DATA_SECRET=your-long-encryption-secret
-MEMBERSHIP_DATA_DIR=/var/data
+DATABASE_URL=your-render-postgres-url
 ```
+
+Use Postgres for deployed data persistence. File storage is only a local fallback and can be reset by redeploys on free web services.
+When updating the app on Render, keep the same `DATABASE_URL` and `MEMBERSHIP_DATA_SECRET` values to preserve existing data.
 
 Do not upload real member data to a public GitHub repository.

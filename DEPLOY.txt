@@ -13,20 +13,22 @@
    MEMBERSHIP_ADMIN_USER=원하는_관리자_아이디
    MEMBERSHIP_ADMIN_PASSWORD=원하는_로그인_비밀번호
    MEMBERSHIP_DATA_SECRET=아주_긴_암호화_비밀키
-   MEMBERSHIP_DATA_DIR=지속저장소_경로
+   DATABASE_URL=Render_Postgres_연결주소
 
 주의:
 - MEMBERSHIP_ADMIN_USER는 관리자 아이디입니다.
 - MEMBERSHIP_ADMIN_PASSWORD는 로그인 비밀번호입니다.
 - MEMBERSHIP_DATA_SECRET은 데이터 암호화 키입니다.
-- MEMBERSHIP_DATA_DIR은 선택사항이지만, Render Disk 같은 지속 저장소를 연결하면 그 경로를 넣으세요.
+- DATABASE_URL이 있으면 회원 데이터는 Postgres에 암호화되어 저장됩니다.
+- DATABASE_URL이 없으면 파일 저장을 쓰기 때문에 Render 재배포 때 데이터가 사라질 수 있습니다.
+- MEMBERSHIP_DATA_SECRET은 바꾸면 기존 암호화 데이터를 읽을 수 없습니다.
 - MEMBERSHIP_DATA_SECRET을 잃어버리거나 바꾸면 기존 암호화 데이터를 읽을 수 없습니다.
 - 공개 운영에서는 반드시 2468 대신 긴 비밀번호를 쓰세요.
 
 데이터 저장:
-- 회원 데이터는 data/membership-data.enc.json에 암호화되어 저장됩니다.
-- 클라우드 서버에서는 이 data 폴더가 계속 보존되는 저장소로 연결되어야 합니다.
-- 저장소가 보존되지 않는 무료 서버에 올리면 서버가 재시작될 때 데이터가 사라질 수 있습니다.
+- Render에서는 Postgres를 만들고 DATABASE_URL을 연결하는 방식을 권장합니다.
+- 회원 데이터는 Postgres 안에 암호화된 payload로 저장됩니다.
+- 앱 코드를 다시 업로드하거나 재배포해도 데이터베이스는 그대로 남습니다.
 
 가장 쉬운 진행:
 1. 이 membership-manager 폴더를 클라우드 서버에 업로드합니다.

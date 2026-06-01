@@ -12,7 +12,9 @@ const legacyDataFile = path.join(dataDir, "membership-data.json");
 const headUser = process.env.MEMBERSHIP_ADMIN_USER || "admin";
 const headPassword = process.env.MEMBERSHIP_ADMIN_PASSWORD || process.env.MEMBERSHIP_PASSWORD || "2468";
 const dataSecret = process.env.MEMBERSHIP_DATA_SECRET || headPassword;
+const databaseUrl = process.env.DATABASE_URL || "";
 const sessions = new Map();
+let pgPool = null;
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -43,6 +45,11 @@ function verifyPassword(password, user) {
   const expected = Buffer.from(user.passwordHash, "base64");
   const actual = crypto.scryptSync(String(password), user.salt, 32);
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function verifyManagerApproval(state, username, password) {
+  const user = state.users.find((item) => item.username.toLowerCase() === String(username || "").trim().toLowerCase());
+  return Boolean(user && user.status === "approved" && ["head", "manager"].includes(user.role) && verifyPassword(password, user));
 }
 
 function createHeadAccount() {
@@ -102,9 +109,12 @@ function normalizeState(state) {
     name: member.name || "",
     phone: member.phone || "",
     birthday: member.birthday || "",
-    email: member.email || "",
-    notes: member.notes || "",
-    points: Number(member.points || 0),
+      email: member.email || "",
+      notes: member.notes || "",
+      customerUsername: member.customerUsername || "",
+      customerPasswordHash: member.customerPasswordHash || "",
+      customerSalt: member.customerSalt || "",
+      points: Number(member.points || 0),
     purchases: Array.isArray(member.purchases) ? member.purchases : [],
     coupons: Array.isArray(member.coupons) ? member.coupons : [],
   }));
@@ -202,7 +212,37 @@ function decryptState(payload) {
   return normalizeState(state);
 }
 
+function getPool() {
+  if (!databaseUrl) return null;
+  if (!pgPool) {
+    const { Pool } = require("pg");
+    pgPool = new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes("localhost") ? false : { rejectUnauthorized: false },
+    });
+  }
+  return pgPool;
+}
+
+async function ensureDatabaseStore() {
+  const pool = getPool();
+  if (!pool) return false;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS membership_store (
+      key TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  const result = await pool.query("SELECT key FROM membership_store WHERE key = $1", ["state"]);
+  if (!result.rowCount) {
+    await writeState(createSeedData());
+  }
+  return true;
+}
+
 async function ensureDataFile() {
+  if (await ensureDatabaseStore()) return;
   await fs.mkdir(dataDir, { recursive: true });
   try {
     await fs.access(encryptedDataFile);
@@ -222,12 +262,33 @@ async function ensureDataFile() {
 }
 
 async function readState() {
+  if (await ensureDatabaseStore()) {
+    const result = await getPool().query("SELECT payload FROM membership_store WHERE key = $1", ["state"]);
+    return decryptState(JSON.parse(result.rows[0].payload));
+  }
   await ensureDataFile();
   return decryptState(JSON.parse(await fs.readFile(encryptedDataFile, "utf8")));
 }
 
 async function writeState(state) {
   const safeState = normalizeState(state);
+  if (databaseUrl) {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS membership_store (
+        key TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(
+      `INSERT INTO membership_store (key, payload, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+      ["state", JSON.stringify(encryptState(safeState))]
+    );
+    return;
+  }
   await fs.mkdir(dataDir, { recursive: true });
   const tempFile = `${encryptedDataFile}.tmp`;
   await fs.writeFile(tempFile, `${JSON.stringify(encryptState(safeState), null, 2)}\n`, "utf8");
@@ -327,12 +388,26 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/public/member-signup" && req.method === "POST") {
     const body = await readRequestJson(req);
     const state = await readState();
+    const customerUsername = String(body.username || "").trim();
+    const customerPassword = String(body.password || "");
+    if (!customerUsername || customerPassword.length < 4) {
+      sendJson(res, 400, { error: "Customer account is required" });
+      return true;
+    }
+    if (state.members.some((item) => item.customerUsername?.toLowerCase() === customerUsername.toLowerCase())) {
+      sendJson(res, 409, { error: "Customer username already exists" });
+      return true;
+    }
+    const customerHash = hashPassword(customerPassword);
     const member = {
       id: createId(),
       name: String(body.name || "").trim(),
       phone: String(body.phone || "").trim(),
       birthday: String(body.birthday || ""),
       email: String(body.email || "").trim(),
+      customerUsername,
+      customerPasswordHash: customerHash.hash,
+      customerSalt: customerHash.salt,
       notes: "QR 직접 가입",
       points: 0,
       purchases: [],
@@ -351,10 +426,10 @@ async function handleApi(req, res, url) {
 
   if (url.pathname === "/api/customer-login" && req.method === "POST") {
     const body = await readRequestJson(req);
-    const phone = normalizePhone(body.phone);
     const state = await readState();
-    const member = state.members.find((item) => normalizePhone(item.phone) === phone && (!body.name || item.name.trim() === String(body.name).trim()));
-    if (!member) {
+    const member = state.members.find((item) => item.customerUsername?.toLowerCase() === String(body.username || "").trim().toLowerCase());
+    const customerUser = member ? { passwordHash: member.customerPasswordHash, salt: member.customerSalt } : null;
+    if (!member || !verifyPassword(body.password, customerUser)) {
       sendJson(res, 401, { error: "Member not found" });
       return true;
     }
@@ -438,6 +513,10 @@ async function handleApi(req, res, url) {
     }
     const body = await readRequestJson(req);
     const state = await readState();
+    if (!verifyManagerApproval(state, body.managerUsername, body.managerPassword)) {
+      sendJson(res, 403, { error: "Manager approval required" });
+      return true;
+    }
     const member = state.members.find((item) => item.id === session.memberId);
     const coupon = member?.coupons.find((item) => item.id === body.couponId);
     if (!member || !coupon) {
@@ -450,7 +529,34 @@ async function handleApi(req, res, url) {
     }
     coupon.usedAt = new Date().toISOString();
     coupon.status = "used";
-    addAudit(state, { username: `customer:${member.name}` }, `${member.name} 고객이 ${coupon.name} 쿠폰을 사용 완료 처리했습니다.`);
+    addAudit(state, { username: body.managerUsername }, `${member.name} 고객의 ${coupon.name} 쿠폰을 사용 완료 처리했습니다.`);
+    await writeState(state);
+    sendJson(res, 200, { ok: true, member: publicMember(member) });
+    return true;
+  }
+
+  if (url.pathname === "/api/customer/deduct-points" && req.method === "POST") {
+    const session = requireSession(req, res);
+    if (!session) return true;
+    if (session.role !== "customer") {
+      sendJson(res, 403, { error: "Customer session required" });
+      return true;
+    }
+    const body = await readRequestJson(req);
+    const amount = Number(body.points || 0);
+    const state = await readState();
+    if (!verifyManagerApproval(state, body.managerUsername, body.managerPassword)) {
+      sendJson(res, 403, { error: "Manager approval required" });
+      return true;
+    }
+    const member = state.members.find((item) => item.id === session.memberId);
+    if (!member || amount <= 0 || member.points < amount) {
+      sendJson(res, 400, { error: "Invalid points" });
+      return true;
+    }
+    member.points -= amount;
+    member.purchases.unshift({ id: createId(), amount: 0, points: -amount, memo: body.memo || "포인트 사용", source: "고객 포인트 차감", date: new Date().toISOString() });
+    addAudit(state, { username: body.managerUsername }, `${member.name} 고객 포인트 ${amount}P를 차감했습니다.`);
     await writeState(state);
     sendJson(res, 200, { ok: true, member: publicMember(member) });
     return true;
@@ -503,7 +609,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, host, () => {
   console.log(`Membership manager is running at http://localhost:${port}`);
-  console.log(`Encrypted data file: ${encryptedDataFile}`);
+  console.log(databaseUrl ? "Encrypted data store: Postgres DATABASE_URL" : `Encrypted data file: ${encryptedDataFile}`);
 });
 
 module.exports = server;

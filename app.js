@@ -30,8 +30,8 @@ const els = {
   adminBackBtn: $("#adminBackBtn"),
   customerLoginScreen: $("#customerLoginScreen"),
   customerLoginForm: $("#customerLoginForm"),
-  customerLoginName: $("#customerLoginName"),
-  customerLoginPhone: $("#customerLoginPhone"),
+  customerLoginUsername: $("#customerLoginUsername"),
+  customerLoginPassword: $("#customerLoginPassword"),
   customerLoginBackBtn: $("#customerLoginBackBtn"),
   customerLoginMessage: $("#customerLoginMessage"),
   customerPortalScreen: $("#customerPortalScreen"),
@@ -41,6 +41,7 @@ const els = {
   customerPortalCouponCount: $("#customerPortalCouponCount"),
   customerCouponList: $("#customerCouponList"),
   customerPortalLogoutBtn: $("#customerPortalLogoutBtn"),
+  customerPointForm: $("#customerPointForm"),
   customerSignupForm: $("#customerSignupForm"),
   backToLoginBtn: $("#backToLoginBtn"),
   signupMessage: $("#signupMessage"),
@@ -147,10 +148,10 @@ async function logout() {
   render();
 }
 
-async function customerLogin(name, phone) {
+async function customerLogin(username, password) {
   const result = await api("/api/customer-login", {
     method: "POST",
-    body: JSON.stringify({ name, phone }),
+    body: JSON.stringify({ username, password }),
   });
   loggedIn = true;
   currentUser = `customer:${result.member.name}`;
@@ -504,11 +505,14 @@ function exportData() {
 }
 
 async function redeemCustomerCoupon(couponId) {
-  if (!confirm("이 쿠폰을 사용 완료 처리할까요? 매장에서 확인 후 눌러주세요.")) return;
+  const managerUsername = prompt("쿠폰 사용을 승인할 관리자 아이디를 입력하세요.");
+  if (!managerUsername) return;
+  const managerPassword = prompt("관리자 비밀번호를 입력하세요.");
+  if (!managerPassword) return;
   try {
     const result = await api("/api/customer/redeem-coupon", {
       method: "POST",
-      body: JSON.stringify({ couponId }),
+      body: JSON.stringify({ couponId, managerUsername, managerPassword }),
     });
     customerMember = result.member;
     renderCustomerPortal();
@@ -650,10 +654,10 @@ els.customerLoginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   els.customerLoginMessage.textContent = "확인 중입니다...";
   try {
-    await customerLogin(els.customerLoginName.value.trim(), els.customerLoginPhone.value.trim());
+    await customerLogin(els.customerLoginUsername.value.trim(), els.customerLoginPassword.value);
     els.customerLoginForm.reset();
   } catch {
-    els.customerLoginMessage.textContent = "가입 정보와 일치하는 회원을 찾지 못했습니다.";
+    els.customerLoginMessage.textContent = "고객 아이디 또는 비밀번호가 맞지 않습니다.";
   }
 });
 
@@ -679,12 +683,40 @@ els.customerSignupForm.addEventListener("submit", async (event) => {
   try {
     await api("/api/public/member-signup", {
       method: "POST",
-      body: JSON.stringify({ name: $("#signupName").value, phone: $("#signupPhone").value, birthday: $("#signupBirthday").value, email: $("#signupEmail").value }),
+      body: JSON.stringify({
+        name: $("#signupName").value,
+        phone: $("#signupPhone").value,
+        birthday: $("#signupBirthday").value,
+        email: $("#signupEmail").value,
+        username: $("#signupUsername").value,
+        password: $("#signupPassword").value,
+      }),
     });
     els.signupMessage.textContent = "가입이 완료되었습니다.";
     els.customerSignupForm.reset();
   } catch (error) {
     els.signupMessage.textContent = error.message;
+  }
+});
+
+els.customerPointForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await api("/api/customer/deduct-points", {
+      method: "POST",
+      body: JSON.stringify({
+        points: Number($("#pointUseAmount").value),
+        memo: $("#pointUseMemo").value,
+        managerUsername: $("#pointManagerUsername").value,
+        managerPassword: $("#pointManagerPassword").value,
+      }),
+    });
+    customerMember = result.member;
+    els.customerPointForm.reset();
+    renderCustomerPortal();
+    alert("포인트가 차감되었습니다.");
+  } catch (error) {
+    alert(error.message || "포인트를 차감할 수 없습니다.");
   }
 });
 
