@@ -10,11 +10,16 @@ let selectedMemberId = null;
 let loggedIn = false;
 let currentUser = null;
 let currentRole = null;
+let customerMember = null;
 let isSaving = false;
 let cameraStream = null;
 
 const $ = (selector) => document.querySelector(selector);
 const els = {
+  roleSelectScreen: $("#roleSelectScreen"),
+  enterAdminBtn: $("#enterAdminBtn"),
+  enterCustomerBtn: $("#enterCustomerBtn"),
+  enterSignupBtn: $("#enterSignupBtn"),
   loginScreen: $("#loginScreen"),
   customerSignupScreen: $("#customerSignupScreen"),
   loginForm: $("#loginForm"),
@@ -22,7 +27,20 @@ const els = {
   loginPassword: $("#loginPassword"),
   loginMessage: $("#loginMessage"),
   showAccountRequestBtn: $("#showAccountRequestBtn"),
-  showCustomerSignupBtn: $("#showCustomerSignupBtn"),
+  adminBackBtn: $("#adminBackBtn"),
+  customerLoginScreen: $("#customerLoginScreen"),
+  customerLoginForm: $("#customerLoginForm"),
+  customerLoginName: $("#customerLoginName"),
+  customerLoginPhone: $("#customerLoginPhone"),
+  customerLoginBackBtn: $("#customerLoginBackBtn"),
+  customerLoginMessage: $("#customerLoginMessage"),
+  customerPortalScreen: $("#customerPortalScreen"),
+  customerPortalName: $("#customerPortalName"),
+  customerPortalTier: $("#customerPortalTier"),
+  customerPortalPoints: $("#customerPortalPoints"),
+  customerPortalCouponCount: $("#customerPortalCouponCount"),
+  customerCouponList: $("#customerCouponList"),
+  customerPortalLogoutBtn: $("#customerPortalLogoutBtn"),
   customerSignupForm: $("#customerSignupForm"),
   backToLoginBtn: $("#backToLoginBtn"),
   signupMessage: $("#signupMessage"),
@@ -44,7 +62,6 @@ const els = {
   memberGrid: $("#memberGrid"),
   memberDetail: $("#memberDetail"),
   searchInput: $("#searchInput"),
-  birthdayCouponBtn: $("#birthdayCouponBtn"),
   customCouponBtn: $("#customCouponBtn"),
   receiptBtn: $("#receiptBtn"),
   qrBtn: $("#qrBtn"),
@@ -61,6 +78,7 @@ const els = {
   couponDialog: $("#couponDialog"),
   couponForm: $("#couponForm"),
   couponMember: $("#couponMember"),
+  couponHelp: $("#couponHelp"),
   receiptDialog: $("#receiptDialog"),
   receiptForm: $("#receiptForm"),
   receiptMember: $("#receiptMember"),
@@ -68,6 +86,7 @@ const els = {
   receiptCanvas: $("#receiptCanvas"),
   receiptText: $("#receiptText"),
   receiptAmount: $("#receiptAmount"),
+  receiptStatus: $("#receiptStatus"),
   qrDialog: $("#qrDialog"),
   qrImage: $("#qrImage"),
   qrLink: $("#qrLink"),
@@ -100,7 +119,8 @@ async function checkSession() {
   currentUser = session.user || null;
   currentRole = session.role || null;
   renderLogin();
-  if (loggedIn) await loadStateFromServer();
+  if (loggedIn && currentRole === "customer") await loadCustomerMember();
+  if (loggedIn && currentRole !== "customer") await loadStateFromServer();
 }
 
 async function login(username, password) {
@@ -121,9 +141,28 @@ async function logout() {
   loggedIn = false;
   currentUser = null;
   currentRole = null;
+  customerMember = null;
   state = { members: [], audit: [], users: [] };
   selectedMemberId = null;
   render();
+}
+
+async function customerLogin(name, phone) {
+  const result = await api("/api/customer-login", {
+    method: "POST",
+    body: JSON.stringify({ name, phone }),
+  });
+  loggedIn = true;
+  currentUser = `customer:${result.member.name}`;
+  currentRole = "customer";
+  customerMember = result.member;
+  els.customerLoginMessage.textContent = "";
+  render();
+}
+
+async function loadCustomerMember() {
+  const result = await api("/api/customer/me");
+  customerMember = result.member;
 }
 
 async function loadStateFromServer() {
@@ -213,8 +252,16 @@ function requireLogin() {
 
 function renderLogin() {
   const signupMode = new URLSearchParams(location.search).get("signup") === "1";
+  const customerLoginMode = new URLSearchParams(location.search).get("customer") === "1";
+  const adminMode = new URLSearchParams(location.search).get("admin") === "1";
+  const customerPortalMode = loggedIn && currentRole === "customer";
+  const staffMode = loggedIn && currentRole !== "customer";
+  els.roleSelectScreen.classList.toggle("hidden", signupMode || customerLoginMode || adminMode || loggedIn);
   els.customerSignupScreen.classList.toggle("hidden", !signupMode || loggedIn);
-  els.loginScreen.classList.toggle("hidden", signupMode || loggedIn);
+  els.customerLoginScreen.classList.toggle("hidden", !customerLoginMode || loggedIn);
+  els.customerPortalScreen.classList.toggle("hidden", !customerPortalMode);
+  els.loginScreen.classList.toggle("hidden", !adminMode || loggedIn);
+  document.querySelector(".app-shell").classList.toggle("hidden", !staffMode);
   document.body.classList.toggle("locked", !loggedIn);
 }
 
@@ -227,6 +274,7 @@ function render() {
   renderDetail();
   renderAudit();
   renderUsers();
+  renderCustomerPortal();
 }
 
 function renderSaveState() {
@@ -234,7 +282,31 @@ function renderSaveState() {
     els.lockStatus.textContent = "로그인이 필요합니다.";
     return;
   }
+  if (currentRole === "customer") {
+    els.lockStatus.textContent = "고객 화면으로 로그인되어 있습니다.";
+    return;
+  }
   els.lockStatus.textContent = isSaving ? "암호화해서 서버에 저장 중입니다..." : `${currentUser} (${currentRole === "head" ? "헤드 관리자" : "관리자"}) 로그인`;
+}
+
+function renderCustomerPortal() {
+  if (!customerMember) return;
+  const coupons = Array.isArray(customerMember.coupons) ? customerMember.coupons : [];
+  els.customerPortalName.textContent = `${customerMember.name}님`;
+  els.customerPortalTier.textContent = `${customerMember.tier} 등급`;
+  els.customerPortalPoints.textContent = formatPoints(customerMember.points);
+  els.customerPortalCouponCount.textContent = `${coupons.filter((coupon) => !coupon.usedAt).length}장`;
+  els.customerCouponList.innerHTML = coupons.length ? coupons.map((coupon) => `
+    <div class="customer-coupon ${coupon.usedAt ? "used" : ""}">
+      <strong>${escapeHtml(coupon.name)}</strong>
+      <span>${escapeHtml(coupon.value || "")} · ${escapeHtml(coupon.code || "")}</span>
+      <small>${coupon.usedAt ? `사용 완료 ${formatDate(coupon.usedAt)}` : coupon.expire ? `만료 ${coupon.expire}` : "사용 가능"}</small>
+      <button class="primary-button" data-redeem="${coupon.id}" ${coupon.usedAt ? "disabled" : ""}>${coupon.usedAt ? "사용 완료" : "쿠폰 사용"}</button>
+    </div>
+  `).join("") : '<p class="empty-copy">보유 쿠폰이 없습니다.</p>';
+  els.customerCouponList.querySelectorAll("[data-redeem]").forEach((button) => {
+    button.addEventListener("click", () => redeemCustomerCoupon(button.dataset.redeem));
+  });
 }
 
 function renderStats() {
@@ -376,9 +448,12 @@ function openMemberEdit(id) {
 
 function openCoupon(id = selectedMemberId) {
   if (id) els.couponMember.value = id;
+  const customMode = document.querySelector('input[name="couponMode"][value="custom"]');
+  customMode.checked = true;
   $("#couponName").value = "";
   $("#couponValue").value = "";
   $("#couponExpire").value = "";
+  updateCouponMode();
   els.couponDialog.showModal();
 }
 
@@ -406,6 +481,17 @@ async function issueBirthdayCoupons() {
   });
 }
 
+function updateCouponMode() {
+  const mode = document.querySelector('input[name="couponMode"]:checked')?.value || "custom";
+  const birthdayMode = mode === "birthday";
+  els.couponMember.disabled = birthdayMode;
+  $("#couponName").value = birthdayMode ? "생일 축하 10% 할인" : $("#couponName").value;
+  $("#couponValue").value = birthdayMode ? "10% 할인" : $("#couponValue").value;
+  els.couponHelp.textContent = birthdayMode
+    ? "이번 달 생일인 회원 전체에게 아직 발급되지 않은 생일 쿠폰을 발급합니다."
+    : "선택 회원에게 쿠폰을 발급합니다.";
+}
+
 function exportData() {
   if (!requireLogin()) return;
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -415,6 +501,21 @@ function exportData() {
   link.download = `membership-data-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+async function redeemCustomerCoupon(couponId) {
+  if (!confirm("이 쿠폰을 사용 완료 처리할까요? 매장에서 확인 후 눌러주세요.")) return;
+  try {
+    const result = await api("/api/customer/redeem-coupon", {
+      method: "POST",
+      body: JSON.stringify({ couponId }),
+    });
+    customerMember = result.member;
+    renderCustomerPortal();
+    alert("쿠폰이 사용 완료 처리되었습니다.");
+  } catch (error) {
+    alert(error.message || "쿠폰을 사용할 수 없습니다.");
+  }
 }
 
 function parseReceiptText(text) {
@@ -434,7 +535,39 @@ function captureReceipt() {
   canvas.width = els.receiptVideo.videoWidth || 640;
   canvas.height = els.receiptVideo.videoHeight || 480;
   canvas.getContext("2d").drawImage(els.receiptVideo, 0, 0, canvas.width, canvas.height);
-  els.receiptText.value = `${els.receiptText.value}\n[영수증 이미지 촬영됨: ${new Date().toLocaleString("ko-KR")}]`.trim();
+  els.receiptStatus.textContent = "촬영되었습니다. 글자 인식을 눌러주세요.";
+}
+
+async function runReceiptOcr() {
+  if (!window.Tesseract) {
+    els.receiptStatus.textContent = "OCR 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.";
+    return;
+  }
+  const canvas = els.receiptCanvas;
+  if (!canvas.width || !canvas.height) {
+    captureReceipt();
+  }
+  els.receiptStatus.textContent = "영수증 글자를 인식 중입니다. 잠시만 기다려 주세요.";
+  try {
+    const result = await Tesseract.recognize(canvas, "kor+eng", {
+      logger: (message) => {
+        if (message.status === "recognizing text" && message.progress) {
+          els.receiptStatus.textContent = `글자 인식 중 ${Math.round(message.progress * 100)}%`;
+        }
+      },
+    });
+    const text = result.data.text.trim();
+    els.receiptText.value = text || "[인식된 글자가 없습니다. 금액을 직접 입력해 주세요.]";
+    const amount = parseReceiptText(text);
+    if (amount) {
+      els.receiptAmount.value = amount;
+      els.receiptStatus.textContent = `인식 완료: 예상 결제금액 ${formatWon(amount)}`;
+    } else {
+      els.receiptStatus.textContent = "글자는 인식했지만 금액을 찾지 못했습니다. 금액을 직접 입력해 주세요.";
+    }
+  } catch {
+    els.receiptStatus.textContent = "OCR 인식에 실패했습니다. 사진을 더 밝고 크게 다시 촬영해 주세요.";
+  }
 }
 
 function stopCamera() {
@@ -466,8 +599,29 @@ els.loginForm.addEventListener("submit", async (event) => {
 els.unlockBtn.addEventListener("click", () => login("admin", els.pinInput.value).catch(() => alert("로그인할 수 없습니다.")));
 els.lockBtn.addEventListener("click", () => logout().catch(() => { loggedIn = false; render(); }));
 els.showAccountRequestBtn.addEventListener("click", () => els.accountDialog.showModal());
-els.showCustomerSignupBtn.addEventListener("click", () => { history.pushState(null, "", "?signup=1"); renderLogin(); });
+els.enterAdminBtn.addEventListener("click", () => { history.pushState(null, "", "?admin=1"); renderLogin(); });
+els.enterCustomerBtn.addEventListener("click", () => { history.pushState(null, "", "?customer=1"); renderLogin(); });
+els.enterSignupBtn.addEventListener("click", () => { history.pushState(null, "", "?signup=1"); renderLogin(); });
+els.adminBackBtn.addEventListener("click", () => { history.pushState(null, "", location.pathname); renderLogin(); });
+els.customerLoginBackBtn.addEventListener("click", () => { history.pushState(null, "", location.pathname); renderLogin(); });
 els.backToLoginBtn.addEventListener("click", () => { history.pushState(null, "", location.pathname); renderLogin(); });
+els.customerPortalLogoutBtn.addEventListener("click", () => {
+  logout().then(() => {
+    history.pushState(null, "", location.pathname);
+    renderLogin();
+  });
+});
+
+els.customerLoginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  els.customerLoginMessage.textContent = "확인 중입니다...";
+  try {
+    await customerLogin(els.customerLoginName.value.trim(), els.customerLoginPhone.value.trim());
+    els.customerLoginForm.reset();
+  } catch {
+    els.customerLoginMessage.textContent = "가입 정보와 일치하는 회원을 찾지 못했습니다.";
+  }
+});
 
 els.accountRequestForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -550,6 +704,12 @@ function addPurchase(memberId, amount, memo, source) {
 
 els.couponForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const mode = document.querySelector('input[name="couponMode"]:checked')?.value || "custom";
+  if (mode === "birthday") {
+    await issueBirthdayCoupons();
+    els.couponDialog.close();
+    return;
+  }
   const memberId = els.couponMember.value;
   const couponName = $("#couponName").value.trim();
   await withServerSave(`${couponName} 쿠폰을 발급했습니다.`, () => {
@@ -575,9 +735,10 @@ els.receiptText.addEventListener("input", () => {
 
 $("#startCameraBtn").addEventListener("click", () => startCamera().catch(() => alert("카메라 권한을 허용해 주세요.")));
 $("#captureReceiptBtn").addEventListener("click", captureReceipt);
+$("#runOcrBtn").addEventListener("click", runReceiptOcr);
 els.receiptDialog.addEventListener("close", stopCamera);
-els.birthdayCouponBtn.addEventListener("click", issueBirthdayCoupons);
 els.customCouponBtn.addEventListener("click", () => openCoupon());
+document.querySelectorAll('input[name="couponMode"]').forEach((input) => input.addEventListener("change", updateCouponMode));
 els.receiptBtn.addEventListener("click", () => els.receiptDialog.showModal());
 els.qrBtn.addEventListener("click", showQr);
 $("#copyQrBtn").addEventListener("click", () => navigator.clipboard.writeText(els.qrLink.value));

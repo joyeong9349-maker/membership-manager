@@ -2,6 +2,10 @@
 
 Login-protected membership manager with encrypted server-side data storage.
 
+Includes separate manager/customer entry screens, manager approval, customer self-signup, customer coupon view, and coupon redemption tracking.
+Receipt camera OCR uses Tesseract.js in the browser, with editable text and amount fields for correction.
+Coupon issuance is unified into one dialog with custom and birthday coupon modes.
+
 ## Run
 
 ```bash

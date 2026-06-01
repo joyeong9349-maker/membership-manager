@@ -29,6 +29,10 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function normalizePhone(phone) {
+  return String(phone || "").replace(/[^0-9]/g, "");
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString("base64")) {
   const hash = crypto.scryptSync(String(password), salt, 32).toString("base64");
   return { salt, hash };
@@ -122,6 +126,19 @@ function publicState(state, session) {
     users: session.role === "head"
       ? state.users.map(({ passwordHash, salt, ...user }) => user)
       : [],
+  };
+}
+
+function publicMember(member) {
+  return {
+    id: member.id,
+    name: member.name,
+    phone: member.phone,
+    birthday: member.birthday,
+    email: member.email,
+    points: member.points,
+    coupons: member.coupons,
+    tier: member.points >= 15000 ? "Diamond" : member.points >= 5000 ? "Gold" : "Silver",
   };
 }
 
@@ -259,10 +276,20 @@ function requireHead(req, res) {
   return session;
 }
 
+function requireStaff(req, res) {
+  const session = requireSession(req, res);
+  if (!session) return null;
+  if (!["head", "manager"].includes(session.role)) {
+    sendJson(res, 403, { error: "Manager permission required" });
+    return null;
+  }
+  return session;
+}
+
 async function handleApi(req, res, url) {
   if (url.pathname === "/api/session" && req.method === "GET") {
     const session = getSession(req);
-    sendJson(res, 200, { loggedIn: Boolean(session), user: session?.username || null, role: session?.role || null });
+    sendJson(res, 200, { loggedIn: Boolean(session), user: session?.username || null, role: session?.role || null, memberId: session?.memberId || null });
     return true;
   }
 
@@ -322,6 +349,25 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (url.pathname === "/api/customer-login" && req.method === "POST") {
+    const body = await readRequestJson(req);
+    const phone = normalizePhone(body.phone);
+    const state = await readState();
+    const member = state.members.find((item) => normalizePhone(item.phone) === phone && (!body.name || item.name.trim() === String(body.name).trim()));
+    if (!member) {
+      sendJson(res, 401, { error: "Member not found" });
+      return true;
+    }
+    const token = crypto.randomBytes(32).toString("base64url");
+    sessions.set(token, { memberId: member.id, username: `customer:${member.name}`, role: "customer", expiresAt: Date.now() + 1000 * 60 * 60 * 8 });
+    addAudit(state, { username: `customer:${member.name}` }, "고객 화면에 로그인했습니다.");
+    await writeState(state);
+    sendJson(res, 200, { ok: true, member: publicMember(member) }, {
+      "Set-Cookie": `membership_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`,
+    });
+    return true;
+  }
+
   if (url.pathname === "/api/login" && req.method === "POST") {
     const body = await readRequestJson(req);
     const state = await readState();
@@ -348,14 +394,14 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname === "/api/state" && req.method === "GET") {
-    const session = requireSession(req, res);
+    const session = requireStaff(req, res);
     if (!session) return true;
     sendJson(res, 200, publicState(await readState(), session));
     return true;
   }
 
   if (url.pathname === "/api/state" && req.method === "POST") {
-    const session = requireSession(req, res);
+    const session = requireStaff(req, res);
     if (!session) return true;
     const body = await readRequestJson(req);
     const state = await readState();
@@ -363,6 +409,50 @@ async function handleApi(req, res, url) {
     if (body.action) addAudit(state, session, String(body.action));
     await writeState(state);
     sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (url.pathname === "/api/customer/me" && req.method === "GET") {
+    const session = requireSession(req, res);
+    if (!session) return true;
+    if (session.role !== "customer") {
+      sendJson(res, 403, { error: "Customer session required" });
+      return true;
+    }
+    const state = await readState();
+    const member = state.members.find((item) => item.id === session.memberId);
+    if (!member) {
+      sendJson(res, 404, { error: "Member not found" });
+      return true;
+    }
+    sendJson(res, 200, { member: publicMember(member) });
+    return true;
+  }
+
+  if (url.pathname === "/api/customer/redeem-coupon" && req.method === "POST") {
+    const session = requireSession(req, res);
+    if (!session) return true;
+    if (session.role !== "customer") {
+      sendJson(res, 403, { error: "Customer session required" });
+      return true;
+    }
+    const body = await readRequestJson(req);
+    const state = await readState();
+    const member = state.members.find((item) => item.id === session.memberId);
+    const coupon = member?.coupons.find((item) => item.id === body.couponId);
+    if (!member || !coupon) {
+      sendJson(res, 404, { error: "Coupon not found" });
+      return true;
+    }
+    if (coupon.usedAt) {
+      sendJson(res, 409, { error: "Coupon already used" });
+      return true;
+    }
+    coupon.usedAt = new Date().toISOString();
+    coupon.status = "used";
+    addAudit(state, { username: `customer:${member.name}` }, `${member.name} 고객이 ${coupon.name} 쿠폰을 사용 완료 처리했습니다.`);
+    await writeState(state);
+    sendJson(res, 200, { ok: true, member: publicMember(member) });
     return true;
   }
 

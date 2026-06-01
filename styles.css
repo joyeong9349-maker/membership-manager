@@ -111,6 +111,24 @@ body {
   flex-wrap: wrap;
 }
 
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.segmented-control label {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--soft);
+  font-weight: 700;
+}
+
 .detail-button-row {
   margin-bottom: 14px;
 }
@@ -160,6 +178,58 @@ body {
   justify-self: center;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.customer-box {
+  width: min(520px, 100%);
+}
+
+.customer-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.customer-summary div,
+.customer-coupon {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.customer-summary span,
+.customer-coupon span,
+.customer-coupon small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.customer-summary strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+}
+
+.customer-coupon-list {
+  display: grid;
+  gap: 10px;
+}
+
+.customer-coupon {
+  display: grid;
+  gap: 8px;
+}
+
+.customer-coupon.used {
+  opacity: 0.62;
+}
+
+.customer-coupon button:disabled {
+  cursor: default;
+  background: #9aa6a4;
 }
 
 button,

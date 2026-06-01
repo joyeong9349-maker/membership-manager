@@ -7,6 +7,22 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div id="roleSelectScreen" class="login-screen">
+      <div class="login-box">
+        <div class="brand compact">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <h1>Membership Vault</h1>
+            <p>접속 유형 선택</p>
+          </div>
+        </div>
+        <p class="login-copy">사용자 유형에 맞는 화면으로 이동합니다.</p>
+        <button id="enterAdminBtn" class="primary-button" type="button">관리자 로그인</button>
+        <button id="enterCustomerBtn" class="ghost-button full" type="button">고객 멤버십</button>
+        <button id="enterSignupBtn" class="ghost-button full" type="button">멤버십 가입</button>
+      </div>
+    </div>
+
     <div id="loginScreen" class="login-screen">
       <form id="loginForm" class="login-box">
         <div class="brand compact">
@@ -25,9 +41,45 @@
         <input id="loginPassword" type="password" placeholder="비밀번호" autocomplete="current-password" required />
         <button class="primary-button" type="submit">로그인</button>
         <button id="showAccountRequestBtn" class="ghost-button full" type="button">관리자 계정 신청</button>
-        <button id="showCustomerSignupBtn" class="ghost-button full" type="button">고객 가입 화면</button>
+        <button id="adminBackBtn" class="ghost-button full" type="button">처음으로</button>
         <p id="loginMessage" class="login-message"></p>
       </form>
+    </div>
+
+    <div id="customerLoginScreen" class="login-screen hidden">
+      <form id="customerLoginForm" class="login-box">
+        <div class="brand compact">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <h1>Membership Vault</h1>
+            <p>고객 로그인</p>
+          </div>
+        </div>
+        <p class="login-copy">가입한 이름과 연락처로 보유 포인트와 쿠폰을 확인합니다.</p>
+        <input id="customerLoginName" placeholder="이름" autocomplete="name" />
+        <input id="customerLoginPhone" required placeholder="연락처" autocomplete="tel" />
+        <button class="primary-button" type="submit">내 멤버십 보기</button>
+        <button id="customerLoginBackBtn" class="ghost-button full" type="button">처음으로</button>
+        <p id="customerLoginMessage" class="login-message"></p>
+      </form>
+    </div>
+
+    <div id="customerPortalScreen" class="login-screen hidden">
+      <div class="login-box customer-box">
+        <div class="brand compact">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <h1 id="customerPortalName">내 멤버십</h1>
+            <p id="customerPortalTier">등급 확인 중</p>
+          </div>
+        </div>
+        <div class="customer-summary">
+          <div><span>보유 포인트</span><strong id="customerPortalPoints">0P</strong></div>
+          <div><span>보유 쿠폰</span><strong id="customerPortalCouponCount">0장</strong></div>
+        </div>
+        <div id="customerCouponList" class="customer-coupon-list"></div>
+        <button id="customerPortalLogoutBtn" class="ghost-button full" type="button">로그아웃</button>
+      </div>
     </div>
 
     <div id="customerSignupScreen" class="login-screen hidden">
@@ -44,7 +96,7 @@
         <input id="signupBirthday" type="date" aria-label="생일" />
         <input id="signupEmail" type="email" placeholder="이메일" autocomplete="email" />
         <button class="primary-button" type="submit">가입하기</button>
-        <button id="backToLoginBtn" class="ghost-button full" type="button">로그인으로 돌아가기</button>
+        <button id="backToLoginBtn" class="ghost-button full" type="button">처음으로</button>
         <p id="signupMessage" class="login-message"></p>
       </form>
     </div>
@@ -121,10 +173,6 @@
             <h2>멤버십 운영</h2>
           </div>
           <div class="topbar-actions">
-            <button id="birthdayCouponBtn" class="secondary-button">
-              <span class="icon gift" aria-hidden="true"></span>
-              생일 쿠폰 발급
-            </button>
             <button id="customCouponBtn" class="secondary-button">
               <span class="icon gift" aria-hidden="true"></span>
               쿠폰 발급
@@ -250,11 +298,16 @@
 
     <dialog id="couponDialog" class="modal">
       <form id="couponForm" class="modal-box">
-        <div class="section-heading"><h3>쿠폰 발급</h3><p>선택 회원에게 원하는 쿠폰을 발급합니다.</p></div>
+        <div class="section-heading"><h3>쿠폰 발급</h3><p>생일 쿠폰 또는 직접 만든 쿠폰을 발급합니다.</p></div>
+        <div class="segmented-control">
+          <label><input type="radio" name="couponMode" value="custom" checked /> 직접 발급</label>
+          <label><input type="radio" name="couponMode" value="birthday" /> 생일 쿠폰</label>
+        </div>
         <select id="couponMember" required aria-label="쿠폰 회원"></select>
         <input id="couponName" required placeholder="쿠폰명" />
         <input id="couponValue" placeholder="혜택 예: 10% 할인, 5,000원 할인" />
         <input id="couponExpire" type="date" aria-label="만료일" />
+        <p id="couponHelp" class="login-message">선택 회원에게 쿠폰을 발급합니다.</p>
         <div class="modal-actions">
           <button class="primary-button" type="submit">발급</button>
           <button class="ghost-button" value="cancel" formmethod="dialog">닫기</button>
@@ -264,14 +317,16 @@
 
     <dialog id="receiptDialog" class="modal">
       <form id="receiptForm" class="modal-box">
-        <div class="section-heading"><h3>영수증 인식</h3><p>카메라 촬영 후 금액과 메모를 구매이력으로 저장합니다.</p></div>
+        <div class="section-heading"><h3>영수증 인식</h3><p>카메라 촬영 후 OCR로 금액을 읽고 구매이력으로 저장합니다.</p></div>
         <select id="receiptMember" required aria-label="영수증 회원"></select>
         <video id="receiptVideo" class="receipt-video" autoplay muted playsinline></video>
         <canvas id="receiptCanvas" class="hidden"></canvas>
         <div class="modal-actions">
           <button id="startCameraBtn" class="secondary-button" type="button">카메라 켜기</button>
           <button id="captureReceiptBtn" class="secondary-button" type="button">촬영</button>
+          <button id="runOcrBtn" class="secondary-button" type="button">글자 인식</button>
         </div>
+        <p id="receiptStatus" class="login-message"></p>
         <textarea id="receiptText" placeholder="영수증 텍스트 또는 메모"></textarea>
         <input id="receiptAmount" required type="number" min="100" step="100" placeholder="인식/입력된 구매 금액" />
         <div class="modal-actions">
@@ -293,6 +348,7 @@
       </div>
     </dialog>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.1/tesseract.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="./app.js"></script>
   </body>
 </html>
