@@ -7,6 +7,7 @@ Receipt camera OCR uses Tesseract.js in the browser, with editable text and amou
 Coupon issuance is unified into one dialog with custom and birthday coupon modes.
 Receipt OCR now preprocesses the image and recognizes three-digit totals such as 364.
 Customers now create their own login account, and coupon redemption or point deduction requires manager approval.
+Customer membership pages use a full scrolling layout with a polished customer-facing design.
 
 ## Run
 
