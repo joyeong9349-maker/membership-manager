@@ -519,10 +519,42 @@ async function redeemCustomerCoupon(couponId) {
 }
 
 function parseReceiptText(text) {
-  const amounts = [...text.matchAll(/(?:₩|KRW)?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,})/g)]
-    .map((match) => Number(match[1].replaceAll(",", "")))
-    .filter((value) => value >= 100);
+  const normalized = String(text || "")
+    .replace(/[Oo]/g, "0")
+    .replace(/[Il|]/g, "1")
+    .replace(/원/g, " ")
+    .replace(/₩/g, " ");
+  const plain = normalized.replace(/([0-9]),([0-9]{3})/g, "$1$2");
+  const keywordMatch = plain.match(/(?:합계|총액|결제|승인|금액|total|amount|sum)[^\d]{0,12}([0-9]{3,})/i);
+  if (keywordMatch) return Number(keywordMatch[1]);
+
+  const amounts = [...plain.matchAll(/([0-9]{3,})/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value >= 100 && value <= 10000000);
   return amounts.length ? Math.max(...amounts) : "";
+}
+
+function buildOcrCanvas(sourceCanvas) {
+  const width = sourceCanvas.width || 640;
+  const height = sourceCanvas.height || 480;
+  const scale = Math.max(2, Math.min(3, Math.floor(1800 / Math.max(width, 1))));
+  const canvas = document.createElement("canvas");
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let index = 0; index < image.data.length; index += 4) {
+    const gray = image.data[index] * 0.299 + image.data[index + 1] * 0.587 + image.data[index + 2] * 0.114;
+    const contrast = gray > 160 ? 255 : gray > 118 ? 235 : 0;
+    image.data[index] = contrast;
+    image.data[index + 1] = contrast;
+    image.data[index + 2] = contrast;
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 async function startCamera() {
@@ -549,12 +581,14 @@ async function runReceiptOcr() {
   }
   els.receiptStatus.textContent = "영수증 글자를 인식 중입니다. 잠시만 기다려 주세요.";
   try {
-    const result = await Tesseract.recognize(canvas, "kor+eng", {
+    const ocrCanvas = buildOcrCanvas(canvas);
+    const result = await Tesseract.recognize(ocrCanvas, "eng", {
       logger: (message) => {
         if (message.status === "recognizing text" && message.progress) {
           els.receiptStatus.textContent = `글자 인식 중 ${Math.round(message.progress * 100)}%`;
         }
       },
+      tessedit_char_whitelist: "0123456789,.$₩WONKRWTOTALAMOUNTSUMabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ",
     });
     const text = result.data.text.trim();
     els.receiptText.value = text || "[인식된 글자가 없습니다. 금액을 직접 입력해 주세요.]";
@@ -736,6 +770,10 @@ els.receiptText.addEventListener("input", () => {
 $("#startCameraBtn").addEventListener("click", () => startCamera().catch(() => alert("카메라 권한을 허용해 주세요.")));
 $("#captureReceiptBtn").addEventListener("click", captureReceipt);
 $("#runOcrBtn").addEventListener("click", runReceiptOcr);
+$("#closeReceiptBtn").addEventListener("click", () => {
+  stopCamera();
+  els.receiptDialog.close();
+});
 els.receiptDialog.addEventListener("close", stopCamera);
 els.customCouponBtn.addEventListener("click", () => openCoupon());
 document.querySelectorAll('input[name="couponMode"]').forEach((input) => input.addEventListener("change", updateCouponMode));
