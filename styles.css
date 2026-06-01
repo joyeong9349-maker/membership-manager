@@ -39,6 +39,10 @@ body {
   display: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .login-box {
   width: min(420px, 100%);
   background: var(--surface);
@@ -68,6 +72,94 @@ body {
 .login-box button {
   width: 100%;
   margin-top: 10px;
+}
+
+.modal {
+  width: min(560px, calc(100vw - 30px));
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: var(--shadow);
+}
+
+.modal::backdrop {
+  background: rgba(24, 32, 34, 0.42);
+}
+
+.modal-box {
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  background: var(--surface);
+}
+
+.modal-box textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.modal-actions,
+.detail-button-row,
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.detail-button-row {
+  margin-bottom: 14px;
+}
+
+.user-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.user-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.compact-danger {
+  width: auto;
+  min-height: 42px;
+  margin-top: 0;
+  padding: 0 12px;
+}
+
+.receipt-video {
+  width: 100%;
+  min-height: 220px;
+  background: #101719;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.qr-image {
+  width: 220px;
+  height: 220px;
+  justify-self: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 button,

@@ -6,11 +6,12 @@ const crypto = require("node:crypto");
 const port = Number(process.env.PORT || 8080);
 const host = "0.0.0.0";
 const root = __dirname;
-const dataDir = path.join(root, "data");
+const dataDir = process.env.MEMBERSHIP_DATA_DIR ? path.resolve(process.env.MEMBERSHIP_DATA_DIR) : path.join(root, "data");
 const encryptedDataFile = path.join(dataDir, "membership-data.enc.json");
 const legacyDataFile = path.join(dataDir, "membership-data.json");
-const appPassword = process.env.MEMBERSHIP_PASSWORD || "2468";
-const dataSecret = process.env.MEMBERSHIP_DATA_SECRET || appPassword;
+const headUser = process.env.MEMBERSHIP_ADMIN_USER || "admin";
+const headPassword = process.env.MEMBERSHIP_ADMIN_PASSWORD || process.env.MEMBERSHIP_PASSWORD || "2468";
+const dataSecret = process.env.MEMBERSHIP_DATA_SECRET || headPassword;
 const sessions = new Map();
 
 const types = {
@@ -28,8 +29,34 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function createSeedData() {
+function hashPassword(password, salt = crypto.randomBytes(16).toString("base64")) {
+  const hash = crypto.scryptSync(String(password), salt, 32).toString("base64");
+  return { salt, hash };
+}
+
+function verifyPassword(password, user) {
+  if (!user?.passwordHash || !user?.salt) return false;
+  const expected = Buffer.from(user.passwordHash, "base64");
+  const actual = crypto.scryptSync(String(password), user.salt, 32);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function createHeadAccount() {
+  const password = hashPassword(headPassword);
   return {
+    id: createId(),
+    username: headUser,
+    displayName: "Head Manager",
+    role: "head",
+    status: "approved",
+    passwordHash: password.hash,
+    salt: password.salt,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function createSeedData() {
+  return normalizeState({
     members: [
       {
         id: createId(),
@@ -37,9 +64,7 @@ function createSeedData() {
         phone: "010-1234-7788",
         birthday: "1992-05-31",
         points: 6200,
-        purchases: [
-          { id: createId(), amount: 124000, points: 6200, memo: "정기 구매", date: new Date().toISOString() },
-        ],
+        purchases: [{ id: createId(), amount: 124000, points: 6200, memo: "정기 구매", date: new Date().toISOString() }],
         coupons: [],
       },
       {
@@ -48,14 +73,65 @@ function createSeedData() {
         phone: "010-8821-4400",
         birthday: "1988-11-09",
         points: 15850,
-        purchases: [
-          { id: createId(), amount: 317000, points: 15850, memo: "VIP 패키지", date: new Date().toISOString() },
-        ],
+        purchases: [{ id: createId(), amount: 317000, points: 15850, memo: "VIP 패키지", date: new Date().toISOString() }],
         coupons: [],
       },
     ],
-    audit: ["암호화된 서버 저장소를 만들었습니다."],
+    audit: [],
+    users: [createHeadAccount()],
+  });
+}
+
+function normalizeState(state) {
+  const next = {
+    members: Array.isArray(state?.members) ? state.members : [],
+    audit: Array.isArray(state?.audit) ? state.audit : [],
+    users: Array.isArray(state?.users) ? state.users : [],
   };
+
+  if (!next.users.some((user) => user.username === headUser && user.role === "head")) {
+    next.users.unshift(createHeadAccount());
+  }
+
+  next.members = next.members.map((member) => ({
+    id: member.id || createId(),
+    name: member.name || "",
+    phone: member.phone || "",
+    birthday: member.birthday || "",
+    email: member.email || "",
+    notes: member.notes || "",
+    points: Number(member.points || 0),
+    purchases: Array.isArray(member.purchases) ? member.purchases : [],
+    coupons: Array.isArray(member.coupons) ? member.coupons : [],
+  }));
+
+  next.audit = next.audit.map((entry) => {
+    if (typeof entry === "string") {
+      return { id: createId(), date: new Date().toISOString(), actor: "system", action: entry };
+    }
+    return { id: entry.id || createId(), date: entry.date || new Date().toISOString(), actor: entry.actor || "system", action: entry.action || "" };
+  }).slice(0, 80);
+
+  return next;
+}
+
+function publicState(state, session) {
+  return {
+    members: state.members,
+    audit: state.audit,
+    users: session.role === "head"
+      ? state.users.map(({ passwordHash, salt, ...user }) => user)
+      : [],
+  };
+}
+
+function addAudit(state, session, action) {
+  state.audit = [{
+    id: createId(),
+    date: new Date().toISOString(),
+    actor: session?.username || "system",
+    action,
+  }, ...state.audit].slice(0, 80);
 }
 
 function send(res, status, body, contentType = "text/plain; charset=utf-8", headers = {}) {
@@ -85,15 +161,13 @@ function encryptState(state) {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", makeKey(salt), iv);
-  const plaintext = Buffer.from(JSON.stringify(state), "utf8");
-  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  const ciphertext = Buffer.concat([cipher.update(Buffer.from(JSON.stringify(normalizeState(state)), "utf8")), cipher.final()]);
   return {
-    version: 1,
+    version: 2,
     algorithm: "aes-256-gcm",
     salt: salt.toString("base64"),
     iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
     data: ciphertext.toString("base64"),
   };
 }
@@ -108,7 +182,7 @@ function decryptState(payload) {
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   const state = JSON.parse(plaintext.toString("utf8"));
   if (!isValidState(state)) throw new Error("Invalid data file");
-  return state;
+  return normalizeState(state);
 }
 
 async function ensureDataFile() {
@@ -118,8 +192,7 @@ async function ensureDataFile() {
     return;
   } catch {
     try {
-      const legacyText = await fs.readFile(legacyDataFile, "utf8");
-      const legacyState = JSON.parse(legacyText);
+      const legacyState = JSON.parse(await fs.readFile(legacyDataFile, "utf8"));
       if (isValidState(legacyState)) {
         await writeState(legacyState);
         return;
@@ -133,15 +206,14 @@ async function ensureDataFile() {
 
 async function readState() {
   await ensureDataFile();
-  const text = await fs.readFile(encryptedDataFile, "utf8");
-  return decryptState(JSON.parse(text));
+  return decryptState(JSON.parse(await fs.readFile(encryptedDataFile, "utf8")));
 }
 
 async function writeState(state) {
-  if (!isValidState(state)) throw new Error("Invalid state");
+  const safeState = normalizeState(state);
   await fs.mkdir(dataDir, { recursive: true });
   const tempFile = `${encryptedDataFile}.tmp`;
-  await fs.writeFile(tempFile, `${JSON.stringify(encryptState(state), null, 2)}\n`, "utf8");
+  await fs.writeFile(tempFile, `${JSON.stringify(encryptState(safeState), null, 2)}\n`, "utf8");
   await fs.rename(tempFile, encryptedDataFile);
 }
 
@@ -155,12 +227,7 @@ async function readRequestJson(req) {
 }
 
 function parseCookies(req) {
-  return Object.fromEntries(
-    String(req.headers.cookie || "")
-      .split(";")
-      .map((item) => item.trim().split("="))
-      .filter(([key, value]) => key && value)
-  );
+  return Object.fromEntries(String(req.headers.cookie || "").split(";").map((item) => item.trim().split("=")).filter(([key, value]) => key && value));
 }
 
 function getSession(req) {
@@ -176,27 +243,98 @@ function getSession(req) {
 }
 
 function requireSession(req, res) {
-  if (getSession(req)) return true;
+  const session = getSession(req);
+  if (session) return session;
   sendJson(res, 401, { error: "Login required" });
-  return false;
+  return null;
+}
+
+function requireHead(req, res) {
+  const session = requireSession(req, res);
+  if (!session) return null;
+  if (session.role !== "head") {
+    sendJson(res, 403, { error: "Head manager permission required" });
+    return null;
+  }
+  return session;
 }
 
 async function handleApi(req, res, url) {
   if (url.pathname === "/api/session" && req.method === "GET") {
-    sendJson(res, 200, { loggedIn: Boolean(getSession(req)) });
+    const session = getSession(req);
+    sendJson(res, 200, { loggedIn: Boolean(session), user: session?.username || null, role: session?.role || null });
+    return true;
+  }
+
+  if (url.pathname === "/api/register-user" && req.method === "POST") {
+    const body = await readRequestJson(req);
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "");
+    const displayName = String(body.displayName || username).trim();
+    if (!username || password.length < 4) {
+      sendJson(res, 400, { error: "Invalid account" });
+      return true;
+    }
+    const state = await readState();
+    if (state.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
+      sendJson(res, 409, { error: "Username already exists" });
+      return true;
+    }
+    const hashed = hashPassword(password);
+    state.users.push({
+      id: createId(),
+      username,
+      displayName,
+      role: "manager",
+      status: "pending",
+      passwordHash: hashed.hash,
+      salt: hashed.salt,
+      createdAt: new Date().toISOString(),
+    });
+    addAudit(state, { username }, "관리자 계정 승인을 요청했습니다.");
+    await writeState(state);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (url.pathname === "/api/public/member-signup" && req.method === "POST") {
+    const body = await readRequestJson(req);
+    const state = await readState();
+    const member = {
+      id: createId(),
+      name: String(body.name || "").trim(),
+      phone: String(body.phone || "").trim(),
+      birthday: String(body.birthday || ""),
+      email: String(body.email || "").trim(),
+      notes: "QR 직접 가입",
+      points: 0,
+      purchases: [],
+      coupons: [],
+    };
+    if (!member.name || !member.phone) {
+      sendJson(res, 400, { error: "Name and phone are required" });
+      return true;
+    }
+    state.members.unshift(member);
+    addAudit(state, { username: "customer-qr" }, `${member.name} 고객이 QR로 직접 가입했습니다.`);
+    await writeState(state);
+    sendJson(res, 200, { ok: true });
     return true;
   }
 
   if (url.pathname === "/api/login" && req.method === "POST") {
     const body = await readRequestJson(req);
-    if (body.password !== appPassword) {
-      sendJson(res, 401, { error: "Invalid password" });
+    const state = await readState();
+    const user = state.users.find((item) => item.username.toLowerCase() === String(body.username || "").trim().toLowerCase());
+    if (!user || user.status !== "approved" || !verifyPassword(body.password, user)) {
+      sendJson(res, 401, { error: "Invalid username or password" });
       return true;
     }
-
     const token = crypto.randomBytes(32).toString("base64url");
-    sessions.set(token, { expiresAt: Date.now() + 1000 * 60 * 60 * 8 });
-    sendJson(res, 200, { ok: true }, {
+    sessions.set(token, { userId: user.id, username: user.username, role: user.role, expiresAt: Date.now() + 1000 * 60 * 60 * 8 });
+    addAudit(state, { username: user.username }, "로그인했습니다.");
+    await writeState(state);
+    sendJson(res, 200, { ok: true, user: user.username, role: user.role }, {
       "Set-Cookie": `membership_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`,
     });
     return true;
@@ -205,21 +343,42 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/logout" && req.method === "POST") {
     const token = parseCookies(req).membership_session;
     if (token) sessions.delete(token);
-    sendJson(res, 200, { ok: true }, {
-      "Set-Cookie": "membership_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-    });
+    sendJson(res, 200, { ok: true }, { "Set-Cookie": "membership_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0" });
     return true;
   }
 
   if (url.pathname === "/api/state" && req.method === "GET") {
-    if (!requireSession(req, res)) return true;
-    sendJson(res, 200, await readState());
+    const session = requireSession(req, res);
+    if (!session) return true;
+    sendJson(res, 200, publicState(await readState(), session));
     return true;
   }
 
   if (url.pathname === "/api/state" && req.method === "POST") {
-    if (!requireSession(req, res)) return true;
-    const state = await readRequestJson(req);
+    const session = requireSession(req, res);
+    if (!session) return true;
+    const body = await readRequestJson(req);
+    const state = await readState();
+    state.members = Array.isArray(body.state?.members) ? body.state.members : state.members;
+    if (body.action) addAudit(state, session, String(body.action));
+    await writeState(state);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (url.pathname === "/api/users/update" && req.method === "POST") {
+    const session = requireHead(req, res);
+    if (!session) return true;
+    const body = await readRequestJson(req);
+    const state = await readState();
+    const user = state.users.find((item) => item.id === body.userId);
+    if (!user) {
+      sendJson(res, 404, { error: "User not found" });
+      return true;
+    }
+    if (body.status) user.status = body.status;
+    if (body.role) user.role = body.role;
+    addAudit(state, session, `${user.username} 계정을 ${user.status}/${user.role} 상태로 변경했습니다.`);
     await writeState(state);
     sendJson(res, 200, { ok: true });
     return true;
@@ -231,15 +390,12 @@ async function handleApi(req, res, url) {
 async function handleStatic(res, url) {
   const requestedPath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
   const filePath = path.resolve(root, `.${requestedPath}`);
-
   if (!filePath.startsWith(root) || filePath.startsWith(dataDir)) {
     send(res, 403, "Forbidden");
     return;
   }
-
   try {
-    const data = await fs.readFile(filePath);
-    send(res, 200, data, types[path.extname(filePath)] || "application/octet-stream");
+    send(res, 200, await fs.readFile(filePath), types[path.extname(filePath)] || "application/octet-stream");
   } catch {
     send(res, 404, "Not found");
   }
@@ -247,12 +403,8 @@ async function handleStatic(res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
-
   handleApi(req, res, url)
-    .then((handled) => {
-      if (!handled) return handleStatic(res, url);
-      return undefined;
-    })
+    .then((handled) => (handled ? undefined : handleStatic(res, url)))
     .catch((error) => {
       console.error(error);
       sendJson(res, 500, { error: "Server error" });
@@ -262,9 +414,6 @@ const server = http.createServer((req, res) => {
 server.listen(port, host, () => {
   console.log(`Membership manager is running at http://localhost:${port}`);
   console.log(`Encrypted data file: ${encryptedDataFile}`);
-  if (!process.env.MEMBERSHIP_PASSWORD || !process.env.MEMBERSHIP_DATA_SECRET) {
-    console.log("Set MEMBERSHIP_PASSWORD and MEMBERSHIP_DATA_SECRET before public deployment.");
-  }
 });
 
 module.exports = server;

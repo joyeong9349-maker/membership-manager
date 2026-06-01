@@ -10,12 +10,16 @@
    npm start
 
 2. Environment variables
-   MEMBERSHIP_PASSWORD=원하는_로그인_비밀번호
+   MEMBERSHIP_ADMIN_USER=원하는_관리자_아이디
+   MEMBERSHIP_ADMIN_PASSWORD=원하는_로그인_비밀번호
    MEMBERSHIP_DATA_SECRET=아주_긴_암호화_비밀키
+   MEMBERSHIP_DATA_DIR=지속저장소_경로
 
 주의:
-- MEMBERSHIP_PASSWORD는 로그인 비밀번호입니다.
+- MEMBERSHIP_ADMIN_USER는 관리자 아이디입니다.
+- MEMBERSHIP_ADMIN_PASSWORD는 로그인 비밀번호입니다.
 - MEMBERSHIP_DATA_SECRET은 데이터 암호화 키입니다.
+- MEMBERSHIP_DATA_DIR은 선택사항이지만, Render Disk 같은 지속 저장소를 연결하면 그 경로를 넣으세요.
 - MEMBERSHIP_DATA_SECRET을 잃어버리거나 바꾸면 기존 암호화 데이터를 읽을 수 없습니다.
 - 공개 운영에서는 반드시 2468 대신 긴 비밀번호를 쓰세요.
 

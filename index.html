@@ -20,12 +20,51 @@
             <p>서버 로그인</p>
           </div>
         </div>
-        <p class="login-copy">어떤 컴퓨터에서든 같은 서버 주소로 들어와 로그인하면 같은 회원 데이터를 사용합니다.</p>
+        <p class="login-copy">지정된 관리자 계정으로 로그인하면 같은 회원 데이터를 관리할 수 있습니다.</p>
+        <input id="loginUsername" type="text" placeholder="관리자 아이디" autocomplete="username" required />
         <input id="loginPassword" type="password" placeholder="비밀번호" autocomplete="current-password" required />
         <button class="primary-button" type="submit">로그인</button>
+        <button id="showAccountRequestBtn" class="ghost-button full" type="button">관리자 계정 신청</button>
+        <button id="showCustomerSignupBtn" class="ghost-button full" type="button">고객 가입 화면</button>
         <p id="loginMessage" class="login-message"></p>
       </form>
     </div>
+
+    <div id="customerSignupScreen" class="login-screen hidden">
+      <form id="customerSignupForm" class="login-box">
+        <div class="brand compact">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <h1>Membership Vault</h1>
+            <p>멤버십 가입</p>
+          </div>
+        </div>
+        <input id="signupName" required placeholder="이름" autocomplete="name" />
+        <input id="signupPhone" required placeholder="연락처" autocomplete="tel" />
+        <input id="signupBirthday" type="date" aria-label="생일" />
+        <input id="signupEmail" type="email" placeholder="이메일" autocomplete="email" />
+        <button class="primary-button" type="submit">가입하기</button>
+        <button id="backToLoginBtn" class="ghost-button full" type="button">로그인으로 돌아가기</button>
+        <p id="signupMessage" class="login-message"></p>
+      </form>
+    </div>
+
+    <dialog id="accountDialog" class="modal">
+      <form id="accountRequestForm" class="modal-box">
+        <div class="section-heading">
+          <h3>관리자 계정 신청</h3>
+          <p>헤드 관리자가 승인하면 로그인할 수 있습니다.</p>
+        </div>
+        <input id="requestDisplayName" required placeholder="이름" />
+        <input id="requestUsername" required placeholder="아이디" autocomplete="username" />
+        <input id="requestPassword" required type="password" placeholder="비밀번호" autocomplete="new-password" />
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">신청</button>
+          <button class="ghost-button" value="cancel" formmethod="dialog">닫기</button>
+        </div>
+        <p id="accountRequestMessage" class="login-message"></p>
+      </form>
+    </dialog>
 
     <div class="app-shell">
       <aside class="sidebar" aria-label="멤버십 요약">
@@ -54,7 +93,7 @@
             </button>
           </div>
           <button id="lockBtn" class="ghost-button full">로그아웃</button>
-          <p class="security-note">기본 비밀번호: 2468. 실제 공개 운영 전에는 반드시 긴 비밀번호로 바꾸세요.</p>
+          <p class="security-note">기본 계정: admin / 2468. 실제 공개 운영 전에는 반드시 바꾸세요.</p>
         </section>
 
         <section class="tier-panel">
@@ -85,6 +124,18 @@
             <button id="birthdayCouponBtn" class="secondary-button">
               <span class="icon gift" aria-hidden="true"></span>
               생일 쿠폰 발급
+            </button>
+            <button id="customCouponBtn" class="secondary-button">
+              <span class="icon gift" aria-hidden="true"></span>
+              쿠폰 발급
+            </button>
+            <button id="receiptBtn" class="secondary-button">
+              <span class="icon download" aria-hidden="true"></span>
+              영수증 인식
+            </button>
+            <button id="qrBtn" class="secondary-button">
+              <span class="icon shield" aria-hidden="true"></span>
+              QR 가입
             </button>
             <button id="exportBtn" class="secondary-button">
               <span class="icon download" aria-hidden="true"></span>
@@ -150,6 +201,14 @@
           </div>
           <div id="memberGrid" class="member-grid"></div>
         </section>
+
+        <section id="accountPanel" class="members-area hidden">
+          <div class="section-heading">
+            <h3>관리자 계정 승인</h3>
+            <p>헤드 관리자만 계정 권한을 부여할 수 있습니다.</p>
+          </div>
+          <div id="userList" class="user-list"></div>
+        </section>
       </main>
 
       <aside class="detail-panel" aria-label="선택 회원 상세">
@@ -173,6 +232,66 @@
         </div>
       </button>
     </template>
+
+    <dialog id="memberEditDialog" class="modal">
+      <form id="memberEditForm" class="modal-box">
+        <div class="section-heading"><h3>회원 프로필 수정</h3><p>회원 기본 정보를 변경합니다.</p></div>
+        <input id="editName" required placeholder="회원 이름" />
+        <input id="editPhone" required placeholder="연락처" />
+        <input id="editBirthday" type="date" aria-label="생일" />
+        <input id="editEmail" type="email" placeholder="이메일" />
+        <textarea id="editNotes" placeholder="메모"></textarea>
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">저장</button>
+          <button class="ghost-button" value="cancel" formmethod="dialog">닫기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="couponDialog" class="modal">
+      <form id="couponForm" class="modal-box">
+        <div class="section-heading"><h3>쿠폰 발급</h3><p>선택 회원에게 원하는 쿠폰을 발급합니다.</p></div>
+        <select id="couponMember" required aria-label="쿠폰 회원"></select>
+        <input id="couponName" required placeholder="쿠폰명" />
+        <input id="couponValue" placeholder="혜택 예: 10% 할인, 5,000원 할인" />
+        <input id="couponExpire" type="date" aria-label="만료일" />
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">발급</button>
+          <button class="ghost-button" value="cancel" formmethod="dialog">닫기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="receiptDialog" class="modal">
+      <form id="receiptForm" class="modal-box">
+        <div class="section-heading"><h3>영수증 인식</h3><p>카메라 촬영 후 금액과 메모를 구매이력으로 저장합니다.</p></div>
+        <select id="receiptMember" required aria-label="영수증 회원"></select>
+        <video id="receiptVideo" class="receipt-video" autoplay muted playsinline></video>
+        <canvas id="receiptCanvas" class="hidden"></canvas>
+        <div class="modal-actions">
+          <button id="startCameraBtn" class="secondary-button" type="button">카메라 켜기</button>
+          <button id="captureReceiptBtn" class="secondary-button" type="button">촬영</button>
+        </div>
+        <textarea id="receiptText" placeholder="영수증 텍스트 또는 메모"></textarea>
+        <input id="receiptAmount" required type="number" min="100" step="100" placeholder="인식/입력된 구매 금액" />
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">구매 저장</button>
+          <button class="ghost-button" value="cancel" formmethod="dialog">닫기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="qrDialog" class="modal">
+      <div class="modal-box">
+        <div class="section-heading"><h3>고객 직접 가입 QR</h3><p>고객이 스캔하면 가입 화면으로 이동합니다.</p></div>
+        <img id="qrImage" class="qr-image" alt="가입 QR" />
+        <input id="qrLink" readonly aria-label="가입 링크" />
+        <div class="modal-actions">
+          <button id="copyQrBtn" class="primary-button" type="button">링크 복사</button>
+          <button class="ghost-button" type="button" onclick="document.querySelector('#qrDialog').close()">닫기</button>
+        </div>
+      </div>
+    </dialog>
 
     <script src="./app.js"></script>
   </body>
