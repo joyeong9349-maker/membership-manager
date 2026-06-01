@@ -8,6 +8,7 @@ Coupon issuance is unified into one dialog with custom and birthday coupon modes
 Receipt OCR now preprocesses the image and recognizes three-digit totals such as 364.
 Customers now create their own login account, and coupon redemption or point deduction requires manager approval.
 Customer membership pages use a full scrolling layout with a polished customer-facing design.
+Receipt OCR supports Philippine peso formats like PHP 364, P 379.50, and stores the captured receipt image with the purchase.
 
 ## Run
 

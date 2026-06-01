@@ -218,7 +218,7 @@ async function safeRefresh() {
 }
 
 function formatWon(value) {
-  return `${Number(value || 0).toLocaleString("ko-KR")}원`;
+  return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 function formatPoints(value) {
@@ -400,7 +400,8 @@ function renderDetail() {
 
 function renderPurchase(purchase) {
   const origin = purchase.source ? ` · ${escapeHtml(purchase.source)}` : "";
-  return `<li><strong>${formatWon(purchase.amount)} · ${formatPoints(purchase.points)} 적립</strong><span>${new Date(purchase.date).toLocaleDateString("ko-KR")} ${escapeHtml(purchase.memo || "메모 없음")}${origin}</span></li>`;
+  const receipt = purchase.receiptImage ? `<img class="receipt-thumb" src="${purchase.receiptImage}" alt="영수증 사진" />` : "";
+  return `<li><strong>${formatWon(purchase.amount)} · ${formatPoints(purchase.points)} 적립</strong><span>${new Date(purchase.date).toLocaleDateString("ko-KR")} ${escapeHtml(purchase.memo || "메모 없음")}${origin}</span>${receipt}</li>`;
 }
 
 function renderCoupon(coupon) {
@@ -526,15 +527,18 @@ function parseReceiptText(text) {
   const normalized = String(text || "")
     .replace(/[Oo]/g, "0")
     .replace(/[Il|]/g, "1")
-    .replace(/원/g, " ")
-    .replace(/₩/g, " ");
-  const plain = normalized.replace(/([0-9]),([0-9]{3})/g, "$1$2");
-  const keywordMatch = plain.match(/(?:합계|총액|결제|승인|금액|total|amount|sum)[^\d]{0,12}([0-9]{3,})/i);
-  if (keywordMatch) return Number(keywordMatch[1]);
-
-  const amounts = [...plain.matchAll(/([0-9]{3,})/g)]
-    .map((match) => Number(match[1]))
-    .filter((value) => value >= 100 && value <= 10000000);
+    .replace(/₱/g, " PHP ")
+    .replace(/\bP\s*(?=\d)/gi, " PHP ")
+    .replace(/php/gi, " PHP ");
+  const keywordPattern = /(?:total|amount|cash|sale|due|balance|subtotal|grand total|합계|총액|결제|승인|금액)[^\d]{0,20}([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/gi;
+  const currencyPattern = /(?:PHP)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/gi;
+  const numberPattern = /([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/g;
+  const toAmount = (value) => Number(String(value).replaceAll(",", ""));
+  const amounts = [
+    ...[...normalized.matchAll(keywordPattern)].map((match) => toAmount(match[1])),
+    ...[...normalized.matchAll(currencyPattern)].map((match) => toAmount(match[1])),
+    ...[...normalized.matchAll(numberPattern)].map((match) => toAmount(match[1])),
+  ].filter((value) => value >= 1 && value <= 10000000);
   return amounts.length ? Math.max(...amounts) : "";
 }
 
@@ -592,7 +596,7 @@ async function runReceiptOcr() {
           els.receiptStatus.textContent = `글자 인식 중 ${Math.round(message.progress * 100)}%`;
         }
       },
-      tessedit_char_whitelist: "0123456789,.$₩WONKRWTOTALAMOUNTSUMabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ",
+      tessedit_char_whitelist: "0123456789,.₱PHPphpPTOTALAMOUNTCASHSALEDUEBALANCESUBGRANDabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ",
     });
     const text = result.data.text.trim();
     els.receiptText.value = text || "[인식된 글자가 없습니다. 금액을 직접 입력해 주세요.]";
@@ -762,7 +766,8 @@ function addPurchase(memberId, amount, memo, source) {
   const beforeTier = getTier(member.points).name;
   const points = Math.floor(amount * POINT_RATE);
   member.points += points;
-  member.purchases.unshift({ id: createId(), amount, points, memo, source, date: new Date().toISOString() });
+  const receiptImage = source === "영수증 카메라" && els.receiptCanvas.width ? els.receiptCanvas.toDataURL("image/jpeg", 0.72) : "";
+  member.purchases.unshift({ id: createId(), amount, points, memo, source, receiptImage, date: new Date().toISOString() });
   const afterTier = getTier(member.points).name;
   if (beforeTier !== afterTier) member.notes = `${member.notes || ""}\n${afterTier} 자동 승급`.trim();
   selectedMemberId = member.id;
