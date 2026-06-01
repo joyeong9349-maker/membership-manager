@@ -1,0 +1,13 @@
+{
+  "name": "membership-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Login-protected membership manager with encrypted server-side data storage.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

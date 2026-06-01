@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>멤버십 관리 프로그램</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="loginScreen" class="login-screen">
+      <form id="loginForm" class="login-box">
+        <div class="brand compact">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div>
+            <h1>Membership Vault</h1>
+            <p>서버 로그인</p>
+          </div>
+        </div>
+        <p class="login-copy">어떤 컴퓨터에서든 같은 서버 주소로 들어와 로그인하면 같은 회원 데이터를 사용합니다.</p>
+        <input id="loginPassword" type="password" placeholder="비밀번호" autocomplete="current-password" required />
+        <button class="primary-button" type="submit">로그인</button>
+        <p id="loginMessage" class="login-message"></p>
+      </form>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="멤버십 요약">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div>
+            <h1>Membership Vault</h1>
+            <p>회원, 포인트, 쿠폰, 구매이력</p>
+          </div>
+        </div>
+
+        <section class="security-panel">
+          <div class="panel-title">
+            <span class="icon shield" aria-hidden="true"></span>
+            <h2>로그인 보안</h2>
+          </div>
+          <p id="lockStatus">서버 로그인 상태를 확인 중입니다.</p>
+          <div class="pin-row">
+            <input id="pinInput" type="password" maxlength="64" placeholder="비밀번호" aria-label="비밀번호" />
+            <button id="unlockBtn" class="icon-button" title="로그인" aria-label="로그인">
+              <span class="icon unlock" aria-hidden="true"></span>
+            </button>
+          </div>
+          <button id="lockBtn" class="ghost-button full">로그아웃</button>
+          <p class="security-note">기본 비밀번호: 2468. 실제 공개 운영 전에는 반드시 긴 비밀번호로 바꾸세요.</p>
+        </section>
+
+        <section class="tier-panel">
+          <h2>등급 기준</h2>
+          <ol>
+            <li><strong>Silver</strong><span>0점 이상</span></li>
+            <li><strong>Gold</strong><span>5,000점 이상</span></li>
+            <li><strong>Diamond</strong><span>15,000점 이상</span></li>
+          </ol>
+        </section>
+
+        <section class="audit-panel">
+          <div class="panel-title">
+            <span class="icon history" aria-hidden="true"></span>
+            <h2>활동 기록</h2>
+          </div>
+          <ul id="auditList"></ul>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local secure membership manager</p>
+            <h2>멤버십 운영</h2>
+          </div>
+          <div class="topbar-actions">
+            <button id="birthdayCouponBtn" class="secondary-button">
+              <span class="icon gift" aria-hidden="true"></span>
+              생일 쿠폰 발급
+            </button>
+            <button id="exportBtn" class="secondary-button">
+              <span class="icon download" aria-hidden="true"></span>
+              데이터 내보내기
+            </button>
+          </div>
+        </header>
+
+        <section class="stats-grid" aria-label="멤버십 통계">
+          <article class="stat-card">
+            <span>전체 회원</span>
+            <strong id="totalMembers">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>총 포인트</span>
+            <strong id="totalPoints">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>이번 달 구매</span>
+            <strong id="monthSales">0원</strong>
+          </article>
+          <article class="stat-card">
+            <span>발급 쿠폰</span>
+            <strong id="couponCount">0</strong>
+          </article>
+        </section>
+
+        <section class="control-band">
+          <div class="form-card">
+            <div class="section-heading">
+              <h3>회원 등록</h3>
+              <p>이름, 연락처, 생일을 저장합니다.</p>
+            </div>
+            <form id="memberForm" class="stacked-form">
+              <input id="memberName" required placeholder="회원 이름" autocomplete="off" />
+              <input id="memberPhone" required placeholder="연락처" autocomplete="off" />
+              <input id="memberBirthday" required type="date" aria-label="생일" />
+              <button class="primary-button" type="submit">회원 추가</button>
+            </form>
+          </div>
+
+          <div class="form-card">
+            <div class="section-heading">
+              <h3>구매 등록</h3>
+              <p>결제금액의 5%가 포인트로 적립됩니다.</p>
+            </div>
+            <form id="purchaseForm" class="stacked-form">
+              <select id="purchaseMember" required aria-label="구매 회원"></select>
+              <input id="purchaseAmount" required type="number" min="100" step="100" placeholder="구매 금액" />
+              <input id="purchaseMemo" placeholder="구매 메모" autocomplete="off" />
+              <button class="primary-button" type="submit">구매 저장</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="members-area">
+          <div class="section-toolbar">
+            <div class="section-heading">
+              <h3>회원 목록</h3>
+              <p>회원 선택 시 구매이력과 쿠폰이 표시됩니다.</p>
+            </div>
+            <input id="searchInput" class="search-input" placeholder="회원 검색" aria-label="회원 검색" />
+          </div>
+          <div id="memberGrid" class="member-grid"></div>
+        </section>
+      </main>
+
+      <aside class="detail-panel" aria-label="선택 회원 상세">
+        <div id="memberDetail" class="empty-detail">
+          <span class="icon user" aria-hidden="true"></span>
+          <p>회원을 선택하세요.</p>
+        </div>
+      </aside>
+    </div>
+
+    <template id="memberCardTemplate">
+      <button class="member-card" type="button">
+        <div class="member-card-top">
+          <span class="tier-badge"></span>
+          <span class="point-text"></span>
+        </div>
+        <strong class="member-name"></strong>
+        <span class="member-phone"></span>
+        <div class="progress-shell">
+          <span class="progress-fill"></span>
+        </div>
+      </button>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
